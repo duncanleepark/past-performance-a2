@@ -1,3 +1,4 @@
 (test
  (name test_a2)
- (libraries ounit2 a2))
+ (deps ../data/handout.csv)
+ (libraries ounit2 a2 backtester))

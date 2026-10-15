@@ -1,84 +1,157 @@
 # Development and Validation Record
 
-## Milestone 1: Cash-only run
+## Milestone 1: Read and represent market data
 
-**Initial plan.** Read `data/handout.csv`, run the `cash` strategy through the engine with `--cash 100.00`, and write `equity.csv`. The executable should print a summary and write one row per date. Planned test: run it from the command line and compare the file to the expected output below.
+**Initial plan.** Read a market CSV with the `csv` package, preserve dates and
+securities in file order, and convert prices to integer cents. Check the tiny
+handout file and verify a missing path gives a useful error.
 
-```
-date,value
-2024-01-02,100.00
-2024-01-03,100.00
-2024-01-04,100.00
-```
+**Actual result.** `Market.load` uses `Csv.load`; `Market.daily_prices` pairs
+each date's prices with security names in header order. The OUnit case
+`market daily prices pair securities and cents` checks all three rows of
+`data/handout.csv`. The missing-file behavior was checked from the command
+line and returned an error with status 1. `dune build` and the then-current
+test suite passed. The CLI still only prints parsed market data; it does not
+yet run a strategy.
 
-**Actual result.** [Test performed and result. Fill in once done.]
+## Milestone 2: Account for orders
 
-## Milestone 2: Portfolio accounting and buy-and-hold
+**Initial plan.** Store cash and whole-share holdings in cents/shares. Accept
+valid buys and sells; reject invalid orders without changing the portfolio.
+Check each rejection and verify that valuation uses the supplied prices.
 
-**Initial plan.** Add order processing (reject zero or negative quantities, unknown securities, negative cash, and negative holdings, leaving the portfolio unchanged) and the `buy-and-hold` strategy, run through the same engine as `cash`. Planned test: before coding, work out cash, holdings, and value for each date by hand. Then run `buy-and-hold` on `data/handout.csv` with `--hold ALFA` and `--hold BETA` and compare. Also try a rejected order followed by a valid one.
+**Actual result.** `Portfolio.apply` implements the order rules and returns a
+new portfolio or a rejection. The OUnit tests cover buys, sells, zero and
+negative quantities, unknown securities, insufficient cash, insufficient
+shares, and valuation at a changed price. These accounting tests passed as
+part of the 11-test suite. Holdings are exposed as a sorted list.
 
-**Actual result.** [Test performed and result.]
+## Milestone 3: Run a strategy through the engine
 
-## Milestone 3: Momentum behind the shared strategy signature
+**Initial plan.** Define one strategy interface that receives only the
+current date and its prices, then returns its updated private state and
+orders. The engine should process orders in sequence and record the
+post-order portfolio value for each date.
 
-**Initial plan.** Define the common strategy module type (abstract `state`, an update function whose input is one day's prices only) and seal `Cash`, `Buy_and_hold`, and `Momentum` with it. The engine must contain no strategy-specific branches. Planned test: predict the target and orders on `handout.csv` by hand (below), then compare against the actual dated states.
+**Actual result.** `Engine.Strategy` and `Engine.Make` provide a shared
+interface and loop. Each call receives only the current date's prices and
+the portfolio before that date's orders. The engine applies orders in order
+and records post-order values. OUnit tests check dated values, rejection
+handling, and momentum transitions. `dune build` and all 13 tests passed.
+The CLI is not yet wired to the engine.
 
-**Actual result.** [Test performed and result.]
+## Milestone 4: Strategies, reports, and command line
 
-## Milestone 4: Command-line path, errors, and final summary
+**Initial plan.** Implement cash, buy-and-hold, and one-day momentum strategies,
+then connect them to the CLI. Print the R6 summary and handle invalid
+arguments, strategy names, cash amounts, and hold selections. Add Cram tests
+for complete output and error cases.
 
-**Initial plan.** Wire up `BatOptParse` (`--cash`, `--hold`), print the full summary (strategy, period, initial and final cash, nonzero holdings, final value, total return), and handle errors with a message and a nonzero exit status: missing file, wrong number of positional arguments, unknown strategy, bad cash string, missing or unknown `--hold`. Planned test: run all three strategies on `data/small-spy-5days.csv` with $10,000.00 and check each full stdout against hand-computed output, plus one run for each error case.
-
-**Actual result.** [Test performed and result.]
+**Actual result.** Cash, buy-and-hold, and momentum strategy modules exist.
+The CLI still only prints parsed market data; the final R6 report, argument
+handling, and Cram tests are not implemented yet.
 
 ## Cash on the supplied tiny market file
 
-With $100.00 on `data/handout.csv`, the cash strategy never orders, so the state on every date is cash $100.00, no holdings, value $100.00.
+For the planned cash strategy with $100.00 on `data/handout.csv`, there are no
+orders: cash and value remain $100.00 on every date, with no holdings.
 
 | Date | Cash | Holdings | Value |
-|---|---|---|---|
-| 2024-01-02 | 100.00 | none | 100.00 |
-| 2024-01-03 | 100.00 | none | 100.00 |
-| 2024-01-04 | 100.00 | none | 100.00 |
+|---|---:|---|---:|
+| 2024-01-02 | $100.00 | none | $100.00 |
+| 2024-01-03 | $100.00 | none | $100.00 |
+| 2024-01-04 | $100.00 | none | $100.00 |
 
-OUnit group: [name of the group, e.g. `cash_handout`]. It checks cash, holdings, and value on every date.
+Planned OUnit group: `cash_handout`. It does not exist yet.
 
 ## Buy-and-hold predictions
 
-**`data/handout.csv`, $100.00.** On 2024-01-02, ALFA costs $10.00, so 10 shares fit with $0.00 left over. BETA costs $25.00, so 4 shares fit with $0.00 left over. No later orders.
+These are hand calculations for the planned behavior: buy as many whole
+shares as possible on the first date, then hold. They are not strategy test
+results yet.
 
-| Date | ALFA hold: cash / shares / value | BETA hold: cash / shares / value |
+On `data/handout.csv`, start with $100.00. Holding ALFA buys 10 shares for
+$100.00; holding BETA buys 4 shares for $100.00.
+
+| Date | ALFA: cash / shares / value | BETA: cash / shares / value |
 |---|---|---|
-| 2024-01-02 | 0.00 / 10 / 100.00 | 0.00 / 4 / 100.00 |
-| 2024-01-03 | 0.00 / 10 / 120.00 | 0.00 / 4 / 80.00 |
-| 2024-01-04 | 0.00 / 10 / 110.00 | 0.00 / 4 / 84.00 |
+| 2024-01-02 | $0.00 / 10 / $100.00 | $0.00 / 4 / $100.00 |
+| 2024-01-03 | $0.00 / 10 / $120.00 | $0.00 / 4 / $80.00 |
+| 2024-01-04 | $0.00 / 10 / $110.00 | $0.00 / 4 / $84.00 |
 
-**My own file.** [Show the CSV. Use new security names, multiple dates, leftover cash after the first purchase, and a held price that changes later. State the initial cash and held security, then give the dated table of predictions and explain what the file exercises. Name the OUnit group.]
+Planned additional fixture, `buy_hold_example.csv`, with $25.00 and ORBI
+selected; it exercises multiple securities, leftover cash, and a changing
+held price:
+
+```csv
+date,ORBI,NOVA
+2025-01-02,7.00,12.00
+2025-01-03,9.00,10.00
+2025-01-06,8.00,13.00
+```
+
+The first-date purchase is 3 ORBI shares for $21.00, leaving $4.00. Predicted
+daily values are $25.00, $31.00, and $28.00, with cash $4.00 and 3 ORBI shares
+throughout. Planned OUnit group: `buy_hold_handout` and
+`buy_hold_example`; neither exists yet.
 
 ## Stateful-strategy predictions
 
-I used the default one-day momentum rule. [Change this if you replace it with an original rule, and describe that rule precisely.]
+The implemented rule is one-day momentum: after the first date, select the
+security with the greatest positive absolute price increase; ties go to the
+first security in header order. If none increased, keep the prior target.
+On a target change, sell the old holding before buying as many shares as
+possible of the new target. `Momentum` retains the previous prices and target
+in private state.
 
-**`data/handout.csv`, $100.00.**
+On `data/handout.csv` with $100.00, the predicted states are: 2024-01-02,
+$100.00 cash and no holdings; 2024-01-03, $4.00 cash and 8 ALFA shares
+(value $100.00); 2024-01-04, $8.00 cash and 4 BETA shares (value $92.00).
 
-- 2024-01-02: first date, so remember the prices, target is none, no orders. Cash 100.00, value 100.00.
-- 2024-01-03: ALFA is +2.00 and BETA is -5.00, so ALFA is selected and differs from the previous target (none). Nothing to sell; buy 8 ALFA at 12.00 (96.00). Cash 4.00, value 4.00 + 96.00 = 100.00.
-- 2024-01-04: ALFA is -1.00 and BETA is +1.00, so BETA is selected and differs from ALFA. Sell 8 ALFA at 11.00 (cash 92.00), then buy 4 BETA at 21.00 (84.00). Cash 8.00, value 8.00 + 84.00 = 92.00.
+The OUnit test `momentum tie, retention, and target switch` exercises the
+specified transitions using direct dated price rows and a $120.00 portfolio:
+first-day no-trade, first-in-header tie-breaking, no-increase retention,
+unchanged-target no-trade, sell-before-buy switching, and an unaffordable
+new target that is remembered. `momentum runs through engine on handout
+market` also verifies the strategy through the engine.
 
-| Date | Cash | Holdings | Value |
-|---|---|---|---|
-| 2024-01-02 | 100.00 | none | 100.00 |
-| 2024-01-03 | 4.00 | ALFA 8 | 100.00 |
-| 2024-01-04 | 8.00 | BETA 4 | 92.00 |
+The following fixture is a planning example; the tests use direct price rows
+instead of loading this CSV:
 
-**My own file.** [Show the CSV and design it to hit these cases: a tie (first column wins), a day with no positive increase (keep the previous target, no orders), the same target selected twice (no orders), a switch where sale proceeds fund the new purchase, and an unaffordable target (no buy, but it is still remembered). Give the predicted dated states.]
+```csv
+date,ALFA,BETA
+2025-01-02,10.00,10.00
+2025-01-03,12.00,12.00
+2025-01-06,11.00,11.00
+2025-01-07,13.00,12.00
+2025-01-08,13.00,14.00
+2025-01-09,200.00,14.50
+```
 
-OUnit group: [name of the group(s)].
+The intended behaviors for this planning example are covered with direct
+price rows in the OUnit tests.
 
 ## Command-line report check
 
-[Hand-compute final cash, holdings, value, and total return for `cash`, `buy-and-hold`, and `momentum` with $10,000.00 on `data/small-spy-5days.csv`, and paste the expected summaries here. Name the Cram group that checks each run's complete stdout.]
+These are hand-calculated predictions for the planned strategies on
+`data/small-spy-5days.csv` with $10,000.00, not program output. Cash should end
+at $10,000.00, with no holdings, value $10,000.00, and 0.0000% return.
+Buy-and-hold should buy 95 SPY shares on the first date, leaving $62.05 cash;
+final value should be $10,333.45 and return 3.3345%. Under the momentum rule,
+the first positive increase is on September 16: buy 94 shares at $106.35,
+leaving $3.10. The only security remains the target, so no later trade is
+predicted; final value should be $10,166.38 and return 1.6638%.
+
+Planned Cram groups: `report_cash_spy`, `report_buy_hold_spy`, and
+`report_momentum_spy`, each comparing complete standard output. They are not
+implemented, and the predicted summaries must be checked against the final
+R6 format.
 
 ## Consequential revisions
 
-[Record any revisions to the plan above and how you tested the result. If none were needed, say so briefly.]
+The initial milestones planned end-to-end CLI behavior early. Work instead
+proceeded bottom-up: market representation, portfolio accounting, strategies,
+then a generic engine. This made components independently testable, but
+reporting and command-line integration remain outstanding. The engine records
+rejected orders in each daily result for testability; a rejection leaves the
+portfolio unchanged and does not stop later orders.
