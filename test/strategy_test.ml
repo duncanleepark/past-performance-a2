@@ -1,103 +1,105 @@
 open OUnit2
 open Backtester
 
-(* The contents of data/handout.csv. Written to a temporary file so this test
-   needs no dune dependency on the data/ folder. For the final R7 tests, load
-   the real file instead. *)
-let handout_csv =
-  "date,ALFA,BETA\n\
-   2024-01-02,10.00,25.00\n\
-   2024-01-03,12.00,20.00\n\
-   2024-01-04,11.00,21.00\n"
+let load_market path =
+  match Market.load path with
+  | Ok market -> market
+  | Error message -> assert_failure ("could not load " ^ path ^ ": " ^ message)
 
-let market_of_csv contents =
-  let path = Filename.temp_file "market" ".csv" in
-  let oc = open_out path in
-  output_string oc contents;
-  close_out oc;
-  let loaded = Market.load path in
-  Sys.remove path;
-  match loaded with Ok m -> m | Error msg -> failwith msg
-
-let handout = market_of_csv handout_csv
-let initial_cash = 10000
+let initial_cash = 10_000
 
 module Run_cash = Engine.Make (Cash)
 module Run_momentum = Engine.Make (Momentum)
 
-let run_buy_and_hold symbol market =
-  let module S = Buy_and_hold.Make (struct
+let run_buy_and_hold ~cash symbol market =
+  let module Strategy = Buy_and_hold.Make (struct
     let symbol = symbol
   end) in
-  let module E = Engine.Make (S) in
-  E.run ~initial_cash market
+  let module Simulation = Engine.Make (Strategy) in
+  Simulation.run ~initial_cash:cash market
 
 let string_of_day (date, cash, holdings, value) =
   Printf.sprintf "%s cash=%d holdings=[%s] value=%d" date cash
     (String.concat "; "
-       (List.map (fun (s, n) -> Printf.sprintf "%s=%d" s n) holdings))
+       (List.map (fun (symbol, shares) -> Printf.sprintf "%s=%d" symbol shares) holdings))
     value
 
 let string_of_days days = String.concat "\n" (List.map string_of_day days)
 
-(* Compares date, cash, holdings and value on every date. *)
 let check_days label (result : Engine.result) expected =
   let actual =
     List.map
-      (fun (d : Engine.daily_result) ->
-        (d.Engine.date, d.Engine.cash, d.Engine.holdings, d.Engine.value))
-      result.Engine.daily_results
+      (fun (day : Engine.daily_result) ->
+        (day.date, day.cash, day.holdings, day.value))
+      result.daily_results
   in
   assert_equal ~msg:label ~printer:string_of_days expected actual
 
-let d1 = "2024-01-02"
-let d2 = "2024-01-03"
-let d3 = "2024-01-04"
+let handout_days = [ "2024-01-02"; "2024-01-03"; "2024-01-04" ]
+
+let cash_tests =
+  "cash strategy on handout" >::: [
+    "cash, holdings, and value remain unchanged each date" >:: (fun _ ->
+        let market = load_market "../data/handout.csv" in
+        let result = Run_cash.run ~initial_cash market in
+        check_days "cash handout" result
+          [
+            (List.nth handout_days 0, 10_000, [], 10_000);
+            (List.nth handout_days 1, 10_000, [], 10_000);
+            (List.nth handout_days 2, 10_000, [], 10_000);
+          ])
+  ]
+
+let buy_and_hold_tests =
+  "buy-and-hold strategy" >::: [
+    "handout ALFA purchase and all daily valuations" >:: (fun _ ->
+        let market = load_market "../data/handout.csv" in
+        let result = run_buy_and_hold ~cash:initial_cash "ALFA" market in
+        check_days "buy-and-hold handout ALFA" result
+          [
+            ("2024-01-02", 0, [ ("ALFA", 10) ], 10_000);
+            ("2024-01-03", 0, [ ("ALFA", 10) ], 12_000);
+            ("2024-01-04", 0, [ ("ALFA", 10) ], 11_000);
+          ]);
+    "own fixture leaves cash and tracks changing held price" >:: (fun _ ->
+        let market = load_market "../data/r7-buy-hold.csv" in
+        let result = run_buy_and_hold ~cash:2_500 "ORBI" market in
+        check_days "buy-and-hold r7 fixture" result
+          [
+            ("2025-01-02", 400, [ ("ORBI", 3) ], 2_500);
+            ("2025-01-03", 400, [ ("ORBI", 3) ], 3_100);
+            ("2025-01-06", 400, [ ("ORBI", 3) ], 2_800);
+          ])
+  ]
+
+let momentum_tests =
+  "momentum strategy" >::: [
+    "handout selection and daily values" >:: (fun _ ->
+        let market = load_market "../data/handout.csv" in
+        let result = Run_momentum.run ~initial_cash market in
+        check_days "momentum handout" result
+          [
+            ("2024-01-02", 10_000, [], 10_000);
+            ("2024-01-03", 400, [ ("ALFA", 8) ], 10_000);
+            ("2024-01-04", 800, [ ("BETA", 4) ], 9_200);
+          ]);
+    "own fixture exercises tie, retention, switch, and unaffordable target"
+    >:: (fun _ ->
+          let market = load_market "../data/r7-momentum.csv" in
+          let result = Run_momentum.run ~initial_cash:12_000 market in
+          check_days "momentum r7 fixture" result
+            [
+              ("2025-01-02", 12_000, [], 12_000);
+              ("2025-01-03", 0, [ ("ALFA", 10) ], 12_000);
+              ("2025-01-06", 0, [ ("ALFA", 10) ], 11_000);
+              ("2025-01-07", 0, [ ("ALFA", 10) ], 13_000);
+              ("2025-01-08", 400, [ ("BETA", 9) ], 13_000);
+              ("2025-01-09", 13_450, [], 13_450);
+              ("2025-01-10", 13_450, [], 13_450);
+            ])
+  ]
 
 let tests =
-  "strategies on handout.csv with $100.00"
-  >::: [
-         ( "cash: nothing ever changes" >:: fun _ ->
-           check_days "cash"
-             (Run_cash.run ~initial_cash handout)
-             [
-               (d1, 10000, [], 10000);
-               (d2, 10000, [], 10000);
-               (d3, 10000, [], 10000);
-             ] );
-         ( "buy-and-hold ALFA: 10 shares at 10.00, no cash left" >:: fun _ ->
-           check_days "hold ALFA"
-             (run_buy_and_hold "ALFA" handout)
-             [
-               (d1, 0, [ ("ALFA", 10) ], 10000);
-               (d2, 0, [ ("ALFA", 10) ], 12000);
-               (d3, 0, [ ("ALFA", 10) ], 11000);
-             ] );
-         ( "buy-and-hold BETA: 4 shares at 25.00, no cash left" >:: fun _ ->
-           check_days "hold BETA"
-             (run_buy_and_hold "BETA" handout)
-             [
-               (d1, 0, [ ("BETA", 4) ], 10000);
-               (d2, 0, [ ("BETA", 4) ], 8000);
-               (d3, 0, [ ("BETA", 4) ], 8400);
-             ] );
-         ( "momentum: ALFA on 01-03, then switch to BETA on 01-04" >:: fun _ ->
-           (* 01-02: first date, no orders.
-              01-03: ALFA +2.00 beats BETA -5.00; buy 8 ALFA at 12.00
-                     (96.00), cash 4.00.
-              01-04: BETA +1.00 beats ALFA -1.00; sell 8 ALFA at 11.00
-                     (cash 92.00), buy 4 BETA at 21.00 (84.00), cash 8.00. *)
-           let result = Run_momentum.run ~initial_cash handout in
-           check_days "momentum" result
-             [
-               (d1, 10000, [], 10000);
-               (d2, 400, [ ("ALFA", 8) ], 10000);
-               (d3, 800, [ ("BETA", 4) ], 9200);
-             ];
-           assert_equal ~printer:string_of_int 9200 result.Engine.final_value;
-           assert_equal ~printer:string_of_float
-             ~cmp:(fun a b -> Float.abs (a -. b) < 1e-9)
-             (-8.0) result.Engine.total_return );
-       ]
+  "R7 strategy evidence" >::: [ cash_tests; buy_and_hold_tests; momentum_tests ]
 
 let () = run_test_tt_main tests

@@ -1,4 +1,16 @@
 (test
  (name test_a2)
- (deps ../data/handout.csv)
+ (deps ../data/handout.csv ../data/r7-buy-hold.csv ../data/r7-momentum.csv)
  (libraries ounit2 a2 backtester))
+
+(test
+ (name strategy_test)
+ (deps ../data/handout.csv ../data/r7-buy-hold.csv ../data/r7-momentum.csv)
+ (libraries ounit2 a2 backtester))
+
+(test
+ (name money_test)
+ (libraries ounit2 a2 backtester))
+
+(cram
+ (deps ../data/small-spy-5days.csv))
