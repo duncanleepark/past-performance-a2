@@ -20,8 +20,7 @@ let of_csv = function
   | _ -> failwith "Invalid CSV format"
 
 let load path =
-  try Ok (of_csv (Csv.load path)) with
-  | Sys_error msg -> Error msg
+  try Ok (of_csv (Csv.load path)) with Sys_error msg -> Error msg
 
 let securities m = m.securities
 let days m = m.days

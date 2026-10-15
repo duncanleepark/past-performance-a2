@@ -29,7 +29,7 @@ let fail message =
 
 let run argv =
   match argv with
-  | _program :: market_path :: strategy_name :: equity_path :: options ->
+  | _program :: market_path :: strategy_name :: equity_path :: options -> (
       let cash_arg, hold_arg =
         match parse_options options with
         | Ok options -> options
@@ -38,10 +38,13 @@ let run argv =
       let initial_cash =
         match cash_arg with
         | None -> fail "missing required --cash DOLLARS"
-        | Some amount ->
-            (match Money.of_string amount with
-             | Some cents when cents > 0 -> cents
-             | _ -> fail "cash must be a positive amount with exactly two decimal places")
+        | Some amount -> (
+            match Money.of_string amount with
+            | Some cents when cents > 0 -> cents
+            | _ ->
+                fail
+                  "cash must be a positive amount with exactly two decimal \
+                   places")
       in
       let market =
         match Market.load market_path with
@@ -50,10 +53,8 @@ let run argv =
       in
       let strategy =
         match strategy_name with
-        | "cash" ->
-            run_strategy (module Cash) ~initial_cash market
-        | "momentum" ->
-            run_strategy (module Momentum) ~initial_cash market
+        | "cash" -> run_strategy (module Cash) ~initial_cash market
+        | "momentum" -> run_strategy (module Momentum) ~initial_cash market
         | "buy-and-hold" ->
             let symbol =
               match hold_arg with
@@ -62,19 +63,15 @@ let run argv =
             in
             if not (List.mem symbol (Market.securities market)) then
               fail ("unknown security for --hold: " ^ symbol);
-            let module Buy_and_hold_strategy =
-              Buy_and_hold.Make (struct
-                let symbol = symbol
-              end)
-            in
-            run_strategy
-              (module Buy_and_hold_strategy)
-              ~initial_cash market
+            let module Buy_and_hold_strategy = Buy_and_hold.Make (struct
+              let symbol = symbol
+            end) in
+            run_strategy (module Buy_and_hold_strategy) ~initial_cash market
         | name -> fail ("unknown strategy: " ^ name)
       in
-      (match Report.write equity_path strategy with
-       | Error message -> fail message
-       | Ok () -> print_string (Report.render ~strategy:strategy_name strategy))
+      match Report.write equity_path strategy with
+      | Error message -> fail message
+      | Ok () -> print_string (Report.render ~strategy:strategy_name strategy))
   | _ -> fail "expected exactly three positional arguments"
 
 let () = run (Array.to_list Sys.argv)

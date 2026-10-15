@@ -1,4 +1,7 @@
-type direction = Buy | Sell
+type direction =
+  | Buy
+  | Sell
+
 type t = {
   security : string;
   direction : direction;

@@ -2,7 +2,7 @@ module String_map = Map.Make (String)
 
 type t = {
   cash : int;
-  holdings: int String_map.t;
+  holdings : int String_map.t;
 }
 
 type rejection =
@@ -11,9 +11,7 @@ type rejection =
   | Insufficient_shares
   | Insufficient_cash
 
-let create ~cash =
-  { cash; holdings = String_map.empty }
-
+let create ~cash = { cash; holdings = String_map.empty }
 let cash p = p.cash
 let holdings p = String_map.bindings p.holdings
 
@@ -49,10 +47,10 @@ let apply p ~prices { Order.security; direction; quantity } =
   else
     match List.assoc_opt security prices with
     | None -> Error Unknown_security
-    | Some price ->
-        (match direction with
-         | Order.Buy -> buy p security price quantity
-         | Order.Sell -> sell p security price quantity)
+    | Some price -> (
+        match direction with
+        | Order.Buy -> buy p security price quantity
+        | Order.Sell -> sell p security price quantity)
 
 let value p ~prices =
   String_map.fold

@@ -1,12 +1,15 @@
-(* [previous] is the preceding date's prices, [target] the security selected
-   so far (None until a positive increase has been seen). *)
-type state = { previous : Market.prices option; target : string option }
+(* [previous] is the preceding date's prices, [target] the security selected so
+   far (None until a positive increase has been seen). *)
+type state = {
+  previous : Market.prices option;
+  target : string option;
+}
 
 let initial_state () = { previous = None; target = None }
 
 (* The security with the largest strictly positive increase since [previous].
-   [prices] is in file order and a later security replaces the current best
-   only if its increase is strictly larger, so ties go to the earliest. *)
+   [prices] is in file order and a later security replaces the current best only
+   if its increase is strictly larger, so ties go to the earliest. *)
 let best_riser ~previous ~prices =
   List.fold_left
     (fun best (security, price) ->
@@ -38,8 +41,8 @@ let next state ~date:_ ~prices ~portfolio =
       | Some choice when state.target = Some choice ->
           (remember state.target, [])
       | Some choice ->
-          (* Selling everything at today's prices yields exactly the
-             portfolio's value, so that is the budget for the new purchase. *)
+          (* Selling everything at today's prices yields exactly the portfolio's
+             value, so that is the budget for the new purchase. *)
           let budget = Portfolio.value portfolio ~prices in
           let price = List.assoc choice prices in
           let quantity = budget / price in

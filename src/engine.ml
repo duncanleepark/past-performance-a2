@@ -66,8 +66,7 @@ module Make (S : Strategy) = struct
     in
     let total_return =
       (float_of_int final_value -. float_of_int initial_cash)
-      /. float_of_int initial_cash
-      *. 100.0
+      /. float_of_int initial_cash *. 100.0
     in
     {
       initial_cash;

@@ -1,10 +1,8 @@
 let dollars cents = "$" ^ Money.to_string cents
+let shares_phrase n = if n = 1 then "1 share" else Printf.sprintf "%d shares" n
 
-let shares_phrase n =
-  if n = 1 then "1 share" else Printf.sprintf "%d shares" n
-
-(* Dates of the first and last rows. A valid market file has at least one
-   row, so the empty case does not occur in practice. *)
+(* Dates of the first and last rows. A valid market file has at least one row,
+   so the empty case does not occur in practice. *)
 let period (result : Engine.result) =
   match result.Engine.daily_results with
   | [] -> ("n/a", "n/a")
@@ -42,7 +40,8 @@ let equity_csv (result : Engine.result) =
   let rows =
     List.map
       (fun (day : Engine.daily_result) ->
-        Printf.sprintf "%s,%s\n" day.Engine.date (Money.to_string day.Engine.value))
+        Printf.sprintf "%s,%s\n" day.Engine.date
+          (Money.to_string day.Engine.value))
       result.Engine.daily_results
   in
   String.concat "" ("date,value\n" :: rows)

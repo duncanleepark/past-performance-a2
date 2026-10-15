@@ -1,6 +1,6 @@
 (** A strategy owns its private state. On each date, [next] receives only that
-    date's prices and the portfolio as it stands before that date's orders,
-    and returns the updated state and the orders to process. *)
+    date's prices and the portfolio as it stands before that date's orders, and
+    returns the updated state and the orders to process. *)
 module type Strategy = sig
   type state
 
@@ -33,7 +33,7 @@ type result = {
 
 (** Run a strategy across the market, processing dates and orders in order. *)
 module Make (S : Strategy) : sig
+  val run : initial_cash:int -> Market.t -> result
   (** [run ~initial_cash market] runs the strategy from an all-cash portfolio.
       Total return is a percentage, e.g. [6.0] represents a 6% return. *)
-  val run : initial_cash:int -> Market.t -> result
 end
